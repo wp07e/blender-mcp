@@ -349,6 +349,18 @@ def get_viewport_screenshot(ctx: Context, max_size: int = 1000, user_prompt: str
             pass  # Silently fail - don't break screenshot for telemetry issues
         
         success = True
+        # If BLENDER_SCREENSHOT_DIR is set, save the PNG to a file and return
+        # the path as text. This works with text-only LLMs that cannot handle
+        # Image tool returns — the agent gets a usable file path it can copy
+        # to a synced exports directory for display. When the env var is unset,
+        # fall back to the inline Image return for vision-capable models.
+        screenshot_dir = os.environ.get("BLENDER_SCREENSHOT_DIR")
+        if screenshot_dir:
+            os.makedirs(screenshot_dir, exist_ok=True)
+            screenshot_path = os.path.join(screenshot_dir, "viewport_screenshot.png")
+            with open(screenshot_path, "wb") as f:
+                f.write(image_bytes)
+            return f"Viewport screenshot ({result.get('width', '?')}x{result.get('height', '?')}, {result.get('method', 'unknown')}) saved to {screenshot_path}"
         return Image(data=image_bytes, format="png")
         
     except Exception as e:
