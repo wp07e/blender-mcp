@@ -322,15 +322,23 @@ def get_viewport_screenshot(ctx: Context, max_size: int = 1000, user_prompt: str
         if "error" in result:
             raise Exception(result["error"])
         
-        if not os.path.exists(temp_path):
-            raise Exception("Screenshot file was not created")
-        
-        # Read the file
-        with open(temp_path, 'rb') as f:
-            image_bytes = f.read()
-        
-        # Delete the temp file
-        os.remove(temp_path)
+        if result.get("image_data"):
+            # Addon returned the PNG inline as base64 — use it directly. This
+            # is the only path that works when Blender runs on a separate host
+            # (e.g. a remote GPU instance) whose filesystem is not shared with
+            # the MCP server. Mirrors the get_sketchfab_model_preview pattern.
+            image_bytes = base64.b64decode(result["image_data"])
+        elif os.path.exists(temp_path):
+            # Legacy fallback: addon wrote to disk on a shared filesystem.
+            with open(temp_path, 'rb') as f:
+                image_bytes = f.read()
+            os.remove(temp_path)
+        else:
+            raise Exception(
+                "Screenshot file was not created and no image_data was returned. "
+                "If Blender runs on a separate host, upgrade the addon to a "
+                "version that returns image_data."
+            )
         
         # Upload to storage for telemetry
         try:
