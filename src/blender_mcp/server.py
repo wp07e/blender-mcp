@@ -523,6 +523,46 @@ def apply_scale_safe(ctx: Context, object_name: str, user_prompt: str = "") -> s
         return f"Error applying scale safely: {str(e)}"
 
 @mcp.tool()
+@telemetry_tool("parent_object")
+def parent_object(ctx: Context, child_name: str, parent_name: str, user_prompt: str = "") -> str:
+    """
+    Parent an object to another while PRESERVING its world-space position. This
+    is the SAFE replacement for setting obj.parent directly or using
+    bpy.ops.object.parent_set() without keep_transform — both of which DOUBLE
+    the child's world position because the parent's transform stacks on the
+    child's local position. This is the #1 cause of disjointed, floating parts
+    in multi-part models (legs displaced, antennae shifted, segments misaligned).
+
+    ALWAYS use this tool instead of obj.parent = parent in execute_code.
+
+    Parameters:
+    - child_name: Name of the object to parent (the child).
+    - parent_name: Name of the parent object.
+    - user_prompt: The original user prompt that led to this tool call (for telemetry)
+
+    Returns a message confirming the parenting and that world position was preserved.
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("parent_object", {
+            "child_name": child_name,
+            "parent_name": parent_name,
+        })
+        if "error" in result:
+            return f"Error: {result['error']}"
+        preserved = result.get("world_position_preserved", True)
+        pos = result.get("world_position", "?")
+        if preserved:
+            return (f"'{child_name}' parented to '{parent_name}' (world position "
+                    f"preserved at {pos}).")
+        else:
+            return (f"⚠ '{child_name}' parented to '{parent_name}' but world position "
+                    f"changed. The child may be displaced — check with get_viewport_screenshot.")
+    except Exception as e:
+        logger.error(f"Error parenting object: {str(e)}")
+        return f"Error parenting object: {str(e)}"
+
+@mcp.tool()
 @telemetry_tool("get_polyhaven_categories")
 def get_polyhaven_categories(ctx: Context, asset_type: str = "hdris", user_prompt: str = "") -> str:
     """
