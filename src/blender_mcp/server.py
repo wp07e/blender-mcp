@@ -406,6 +406,27 @@ def execute_blender_code(ctx: Context, code: str, user_prompt: str = "") -> str:
     - code: The Python code to execute
     - user_prompt: The original user prompt that led to this tool call (for telemetry)
     """
+    # Block direct renders from the AGENT. bpy.ops.render.render via the MCP
+    # bridge times out (~120s) and crashes Blender. The agent must use the
+    # nohup+run.py preview pattern instead (see SKILL.md). This check is at the
+    # MCP server layer (not the addon) so run.py's direct-socket renders — which
+    # legitimately call bpy.ops.render.render with a 600s budget — are NOT
+    # blocked. run.py bypasses this MCP server entirely.
+    import re as _re
+    if _re.search(r'bpy\.ops\.render\.render', code):
+        return (
+            "BLOCKED: bpy.ops.render.render is not allowed via execute_blender_code. "
+            "It goes through the MCP bridge (~120s timeout) and will time out, "
+            "reset the connection, and crash Blender. To render a preview, "
+            "launch run.py in the background via your bash tool:\n"
+            "  echo '{\"op\":\"preview\",\"settings\":{\"samples\":16,"
+            "\"resolution_x\":960,\"resolution_y\":540}}' > /workspace/blends/<id>/request.json && "
+            "nohup setsid bash -c 'cd /app/blender && uv run --project /app/blender "
+            "python /app/blender/run.py /workspace/blends/<id> --request request.json' "
+            ">> /workspace/blends/<id>/pipeline.log 2>&1 &\n"
+            "Then poll state.json (phase: starting → rendering → gpu_ready) and "
+            "check exports/preview.png. See SKILL.md 'How to work' for details."
+        )
     try:
         # Get the global connection
         blender = get_blender_connection()
