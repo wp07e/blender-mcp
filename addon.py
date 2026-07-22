@@ -513,12 +513,24 @@ class BlenderMCPServer:
                     img.save()
                 bpy.data.images.remove(img)
 
+            # Return the image bytes inline as base64 so the MCP server can
+            # decode them without needing a shared filesystem. This matters
+            # when Blender runs on a remote host (e.g. a GPU instance) whose
+            # /tmp is not visible to the MCP server process. The filepath is
+            # kept for backward compatibility with older servers that read
+            # the file back from disk on a shared filesystem.
+            import base64
+            with open(filepath, "rb") as _f:
+                image_b64 = base64.b64encode(_f.read()).decode("ascii")
+
             return {
                 "success": True,
                 "width": width,
                 "height": height,
                 "filepath": filepath,
                 "method": method,
+                "image_data": image_b64,
+                "format": format,
             }
 
         except Exception as e:
