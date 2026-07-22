@@ -411,37 +411,47 @@ def execute_blender_code(ctx: Context, code: str, user_prompt: str = "") -> str:
 
 @mcp.tool()
 @telemetry_tool("aim_camera_at")
-def aim_camera_at(ctx: Context, camera_name: str, target_name: str, lens: int = 50, user_prompt: str = "") -> str:
+def aim_camera_at(ctx: Context, camera_name: str, target_name: str, lens: int = 50, distance: float = None, user_prompt: str = "") -> str:
     """
     Point a camera at a target object using a Damped Track constraint, so the
-    camera always looks at the target regardless of where either is moved.
+    camera always looks at the target regardless of where either object is moved.
     This is the SAFE way to frame a shot — NEVER hand-calculate camera rotation
     Euler angles (the trig consistently fails and wastes render cycles on
     mis-framed output).
 
     It creates (or refreshes) a DAMPED_TRACK constraint on the camera aiming its
-    negative-Z axis at the target. Existing TRACK_TO / DAMPED_TRACK constraints
-    on the camera are removed first to avoid conflicts.
+    negative-Z axis at the target, AND auto-positions the camera at a sensible
+    distance based on the target's bounding box (so the subject fills the frame
+    without cropping — agents consistently place cameras too close). Existing
+    TRACK_TO / DAMPED_TRACK constraints on the camera are removed first.
 
     Parameters:
     - camera_name: Name of the CAMERA object to aim.
     - target_name: Name of the object the camera should look at (any type).
     - lens: Focal length in mm (default 50). Lower = wider field of view.
+    - distance: Optional explicit camera distance from target in Blender units.
+                If omitted, auto-computed from the target's bounding box
+                (max_dimension * 3.5) for comfortable framing.
     - user_prompt: The original user prompt that led to this tool call (for telemetry)
 
-    Returns a message confirming the constraint, lens, and that the camera is aimed.
+    Returns a message confirming the constraint, lens, distance, and that the camera is aimed.
     """
     try:
-        blender = get_blender_connection()
-        result = blender.send_command("aim_camera_at", {
+        params = {
             "camera_name": camera_name,
             "target_name": target_name,
             "lens": lens,
-        })
+        }
+        if distance is not None:
+            params["distance"] = distance
+        blender = get_blender_connection()
+        result = blender.send_command("aim_camera_at", params)
         if "error" in result:
             return f"Error: {result['error']}"
+        dist = result.get("distance", "?")
         return (f"Camera '{camera_name}' now aimed at '{target_name}' via DAMPED_TRACK "
-                f"constraint (lens={lens}mm). Verify framing with get_viewport_screenshot.")
+                f"constraint (lens={lens}mm, distance={dist}). "
+                f"Verify framing with get_viewport_screenshot.")
     except Exception as e:
         logger.error(f"Error aiming camera: {str(e)}")
         return f"Error aiming camera: {str(e)}"
