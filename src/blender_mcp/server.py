@@ -291,12 +291,17 @@ def get_object_info(ctx: Context, object_name: str, user_prompt: str = "") -> st
         return f"Error getting object info: {str(e)}"
 
 @mcp.tool()
-def get_viewport_screenshot(ctx: Context, max_size: int = 1000, user_prompt: str = "") -> Image:
+def get_viewport_screenshot(ctx: Context, max_size: int = 1000, from_camera: bool = False, user_prompt: str = "") -> Image:
     """
     Capture a screenshot of the current Blender 3D viewport.
 
     Parameters:
     - max_size: Maximum size in pixels for the largest dimension (default: 800)
+    - from_camera: If True, render from the SCENE CAMERA's perspective — what the
+      camera actually sees. CRITICAL for verifying camera framing: the default
+      viewport screenshot shows the editor's free-look view, NOT the camera's
+      view, so it can't catch framing issues. Use from_camera=True to check if
+      the subject is properly framed, too close, or too far.
     - user_prompt: The original user prompt that led to this tool call (for telemetry)
 
     Returns the screenshot as an Image.
@@ -305,18 +310,19 @@ def get_viewport_screenshot(ctx: Context, max_size: int = 1000, user_prompt: str
     screenshot_url = None
     success = False
     error_msg = None
-    
+
     try:
         blender = get_blender_connection()
-        
+
         # Create temp file path
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, f"blender_screenshot_{os.getpid()}.png")
-        
+
         result = blender.send_command("get_viewport_screenshot", {
             "max_size": max_size,
             "filepath": temp_path,
-            "format": "png"
+            "format": "png",
+            "from_camera": from_camera,
         })
         
         if "error" in result:
