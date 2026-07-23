@@ -291,17 +291,24 @@ def get_object_info(ctx: Context, object_name: str, user_prompt: str = "") -> st
         return f"Error getting object info: {str(e)}"
 
 @mcp.tool()
-def get_viewport_screenshot(ctx: Context, max_size: int = 1000, from_camera: bool = False, user_prompt: str = "") -> Image:
+def get_viewport_screenshot(ctx: Context, max_size: int = 1000, from_camera: bool = False, focus_object: str = None, zoom: float = 1.0, user_prompt: str = "") -> Image:
     """
     Capture a screenshot of the current Blender 3D viewport.
+
+    The viewport auto-frames all visible mesh objects by default so the subject
+    is always properly centered and sized in the screenshot.
 
     Parameters:
     - max_size: Maximum size in pixels for the largest dimension (default: 800)
     - from_camera: If True, render from the SCENE CAMERA's perspective — what the
-      camera actually sees. CRITICAL for verifying camera framing: the default
-      viewport screenshot shows the editor's free-look view, NOT the camera's
-      view, so it can't catch framing issues. Use from_camera=True to check if
-      the subject is properly framed, too close, or too far.
+      camera actually sees. Use to check camera framing.
+    - focus_object: Name of an object to frame the screenshot around (instead of
+      all visible meshes). The object's bounding box PLUS its descendant meshes
+      are used for framing. Use this to zoom in on a specific part — e.g.
+      focus_object="Head" to inspect the head, antennae, eyes, and mandibles.
+    - zoom: Multiplier on the auto-frame distance. 1.0 = default (subject fills
+      ~60% of frame). 0.5 = closer/more detail (fills ~90%). 2.0 = farther/more
+      context (fills ~30%). Range 0.1–5.0.
     - user_prompt: The original user prompt that led to this tool call (for telemetry)
 
     Returns the screenshot as an Image.
@@ -318,12 +325,16 @@ def get_viewport_screenshot(ctx: Context, max_size: int = 1000, from_camera: boo
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, f"blender_screenshot_{os.getpid()}.png")
 
-        result = blender.send_command("get_viewport_screenshot", {
+        params = {
             "max_size": max_size,
             "filepath": temp_path,
             "format": "png",
             "from_camera": from_camera,
-        })
+            "zoom": zoom,
+        }
+        if focus_object is not None:
+            params["focus_object"] = focus_object
+        result = blender.send_command("get_viewport_screenshot", params)
         
         if "error" in result:
             raise Exception(result["error"])
